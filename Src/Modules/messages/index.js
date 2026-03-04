@@ -1,0 +1,1 @@
+export {router as messages} from "./messages.controller.js"
