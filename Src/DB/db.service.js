@@ -2,7 +2,6 @@ import { decrypt, encryption, errorThrow } from "../Common/index.js";
 import { usersModel, messagesModel } from "./index.js";
 import mongoose from "mongoose";
 
-
 export async function find(model = usersModel, filter = {}, select = {}) {
   if (model === messagesModel) {
     const encryptedMessages = await messagesModel
@@ -23,16 +22,29 @@ export async function find(model = usersModel, filter = {}, select = {}) {
   return await model.find(filter, select);
 }
 
-export async function findOne(model = usersModel, filter = {}, select = {}) {
-
-  return await usersModel.findOne(filter, select);
+export async function findById(
+  model = usersModel,
+  id,
+  update = false,
+  data = {},
+) {
+  if (update) {
+    return await model.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { new: true, runValidators: true },
+    );
+  }
+  return await model.findById(id);
 }
 
+export async function findOne(model = usersModel, filter = {}, select = {}) {
+  return await model.findOne(filter, select);
+}
 
 export async function createNewOne(model = usersModel, data = {}) {
   return await model.create(data);
 }
-
 
 export async function findAndUpdate(
   model = usersModel,
@@ -46,11 +58,9 @@ export async function findAndUpdate(
   return await model.findOneAndUpdate(filter, updateData, options);
 }
 
-
 export async function deleteMany(model = usersModel, filter = {}) {
   return await model.deleteMany(filter);
 }
-
 
 export async function sendMessage(data = {}, model = messagesModel) {
   if (!data.message || typeof data.message !== "string") {
@@ -65,10 +75,9 @@ export async function sendMessage(data = {}, model = messagesModel) {
   if (!rawReceiver) {
     errorThrow(400, "Recipient is required");
   }
-  const recipientId =
-    mongoose.Types.ObjectId.isValid(rawReceiver)
-      ? new mongoose.Types.ObjectId(rawReceiver)
-      : rawReceiver;
+  const recipientId = mongoose.Types.ObjectId.isValid(rawReceiver)
+    ? new mongoose.Types.ObjectId(rawReceiver)
+    : rawReceiver;
 
   const encryptedData = await encryption(messageTrimmed);
   if (!encryptedData || encryptedData.length === 0) {

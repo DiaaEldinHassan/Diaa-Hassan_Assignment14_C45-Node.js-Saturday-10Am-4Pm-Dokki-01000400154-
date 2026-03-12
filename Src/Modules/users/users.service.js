@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
-import crypto from "crypto";
+import speakeasy from "speakeasy";
+import  QrCode  from "qrcode";
 import {
   errorThrow,
   findOne,
@@ -8,47 +9,55 @@ import {
   findAndUpdate,
   verifyOtp,
   UnauthorizedError,
-
   incrementProfileView,
-
-  sendOtp,
   ValidationError,
   hashCompare,
   AuthenticationError,
-
+  uploadToCloudinary,
+  findById,
+  usersModel,
+  deleteFromCloudinary,
+  sendOtp,
+  sendQrCode,
+  hashing,
 } from "../../index.js";
-import { password } from "../../../Config/config.service.js";
 
 export async function getUserData(user) {
-  console.log(user);
   try {
     if (user.verified === false) {
       throw new UnauthorizedError(
         "User is Not authorized to access data until verification",
       );
     } else {
-      const data = await findOne({ email: user.email });
-      delete data.password;
-      successThrow(200, data);
+      const data = await findOne(usersModel, { email: user.email });
+      const plain = data.toObject();
+      delete plain.password;
+      return plain;
     }
   } catch (error) {
     throw new UnauthorizedError("User is Not verified or not Authorized");
   }
 }
 
-export async function updateProfilePicture(userId, pictureUrl) {
-  const user = await findOne({ _id: new mongoose.Types.ObjectId(userId) });
-  if (!user) throw new NotFoundError("User Not Found");
-  user.picture = pictureUrl;
-  await user.save({ validateModifiedOnly: true });
-
-  const plain = user.toObject();
-  delete plain.password;
-  return plain;
+export async function updateProfilePicture(file, user) {
+  try {
+    console.log(user);
+    if (user.public_id) {
+      await deleteFromCloudinary(user.public_id);
+    }
+    const result = await uploadToCloudinary(file, user._id);
+    await findById(usersModel, user._id, true, {
+      picture: result.secure_url,
+      publicId: result.public_id,
+    });
+    return successThrow(200, "Done Updating Profile Picture");
+  } catch (error) {
+    errorThrow(error.status || 500, error.message || "Cloudinary Error");
+  }
 }
 
 export async function addVisitor(profileUserId, visitorUserId) {
-  const user = await findOne({
+  const user = await findOne(usersModel, {
     _id: new mongoose.Types.ObjectId(profileUserId),
   });
   if (!user) throw new NotFoundError("User Not Found");
@@ -61,7 +70,7 @@ export async function addVisitor(profileUserId, visitorUserId) {
       user.visitors.shift();
     }
     user.visitors.push(visitorId);
-    await user.save();
+    await user.save({ validateBeforeSave: false });
     incrementProfileView(profileUserId).catch(console.error);
   }
 
@@ -71,6 +80,7 @@ export async function addVisitor(profileUserId, visitorUserId) {
 export async function updateUserData(user, data) {
   try {
     const updateData = await findAndUpdate(
+      usersModel,
       { _id: new mongoose.Types.ObjectId(user._id) },
       { $set: data },
       { new: true },
@@ -88,7 +98,8 @@ export async function otpVerification(user, submittedOtp) {
     throw new UnauthorizedError();
   }
 
-  const verifyUser = await findAndUpdate(
+  await findAndUpdate(
+    usersModel,
     { email: user },
     { $set: { verified: true } },
     { new: true },
@@ -111,7 +122,8 @@ export async function updatePassword(user, passwords) {
     if (passwords.oldPassword === passwords.newPassword) {
       errorThrow(400, "Old password and new Password are the same");
     }
-    const findUser = await findOne({ email: user.email });
+
+    const findUser = await findOne(usersModel, { email: user.email });
     const verifyUserPassword = await hashCompare(
       passwords.oldPassword,
       findUser.password,
@@ -120,13 +132,61 @@ export async function updatePassword(user, passwords) {
       throw new AuthenticationError("Wrong password");
     }
     await findAndUpdate(
+      usersModel,
       { email: user.email },
       { $set: { password: passwords.newPassword } },
       { new: true },
     );
     return successThrow(201, { message: "Password Updated" });
   } catch (error) {
+    errorThrow(error.status || 500, error.message);
     throw new ValidationError();
   }
 }
 
+export async function get2FactorAuthenticationCode(user) {
+  try { 
+
+    const checkAuth= await findById(usersModel,user._id);
+    if(checkAuth.twoFactorEnabled){
+      throw new ValidationError("2FA Already Enabled");
+    }
+    const secret = speakeasy.generateSecret({
+      length: 20,
+      name: `Sarahah ${user.firstName} ${user.lastName}`,
+    });
+    await findById(usersModel, user._id, true, {
+      twoFactorKey: secret.base32,
+    });
+    const qrcode = await QrCode.toDataURL(secret.otpauth_url);
+    await sendQrCode(user.email, qrcode, secret.base32);
+    return successThrow(200,{message:"Done Sending Authentication Code"});
+  } catch (error) {
+    errorThrow(error.status || 500, error.message);
+  }
+}
+
+
+export async function verify2FactorAuthenticationCode(user, token) {
+  try {
+    const findUser = await findOne(usersModel, { email: user.email });
+
+    const isValid = speakeasy.totp.verify({
+      secret: findUser.twoFactorKey,  
+      encoding: "base32",
+      token: String(token),        
+      window: 2,
+    });
+
+    if (!isValid) throw new UnauthorizedError("Wrong Authentication Code");
+
+    await findById(usersModel, user._id, true, {
+      twoFactorKey: null,
+      twoFactorEnabled: true,
+    });
+
+    return successThrow(200, { message: "Done Verifying Authentication Code" });
+  } catch (error) {
+    errorThrow(error.status || 500, error.message);
+  }
+}

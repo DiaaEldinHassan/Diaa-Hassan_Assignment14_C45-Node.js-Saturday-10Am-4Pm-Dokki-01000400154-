@@ -42,3 +42,12 @@ export const cronJob = () => {
     }
   });
 };
+
+export const visitorsCleaner=()=> {cron.schedule("0 0 * * 0", async () => {
+  try {
+    await usersModel.updateMany({}, { $set: { visitors: [] } });
+    console.log("Visitors cleared successfully");
+  } catch (error) {
+    console.error("Cron job failed:", error.message);
+  }
+});}

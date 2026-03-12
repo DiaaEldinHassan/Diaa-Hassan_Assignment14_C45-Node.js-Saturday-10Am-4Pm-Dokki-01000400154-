@@ -22,3 +22,8 @@ export const redis_url=process.env.REDIS_URL;
 // Nodemailer Configuration
 export const account=process.env.ACCOUNT;
 export const password=process.env.PASSWORD;
+// Cloud Configuration
+export const cloud_name=process.env.CLOUD_NAME;
+export const cloud_key=process.env.CLOUD_KEY;
+export const cloud_secret=process.env.CLOUD_SECRET;
+export const cloud_app_name=process.env.CLOUD_APP_NAME;

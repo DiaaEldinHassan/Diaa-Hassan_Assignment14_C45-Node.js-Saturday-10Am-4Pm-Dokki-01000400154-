@@ -3,11 +3,9 @@ import {
   errorThrow,
   generateOtp,
   template,
+  qrTemplate,
   set,
-  get,
-  del,
-  ttl,
-  setWithPreserveTTL,
+  emitter,
 } from "../../index.js";
 import { account, password } from "../../../Config/config.service.js";
 
@@ -22,79 +20,11 @@ export async function sendOtp(receiver) {
     .replace("{{TIME}}", new Date().toLocaleString())
     .replace("{{EMAIL}}", receiver);
 
-  try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: account, pass: password },
-    });
-
-    await transporter.sendMail({
-      from: `"Sarahah App" <${account}>`,
-      to: receiver,
-      subject: "Your OTP Code",
-      html,
-    });
-  } catch (err) {
-    await del(`OTP:${receiver}`);
-    errorThrow(500, "Failed to send email.");
-  }
-}
-
-const MAX_ATTEMPTS = 3;
-const REVOKE_DURATION = 600;
-
-export async function verifyOtp(receiver, submittedOtp) {
-  const otpKey = `OTP:${receiver}`;
-  const revokedKey = `RevokedOtp:${receiver}`;
-
-  const isRevoked = await get(revokedKey);
-  if (isRevoked) {
-    const remaining = await ttl(revokedKey);
-    errorThrow(
-      429,
-      `You are not allowed to request another OTP for ${remaining} seconds.`,
-    );
-  }
-
-  const raw = await get(otpKey);
-  if (!raw) {
-    errorThrow(410, "OTP expired or never issued.");
-  }
-
-  const payload = JSON.parse(raw);
-
-  if (payload.attempts >= MAX_ATTEMPTS) {
-    await set(revokedKey, "blocked", REVOKE_DURATION);
-    await del(otpKey);
-
-    errorThrow(
-      429,
-      `Too many failed attempts. Try again after ${REVOKE_DURATION} seconds.`,
-    );
-  }
-
-  if (String(payload.otp) !== String(submittedOtp)) {
-    payload.attempts += 1;
-
-    await setWithPreserveTTL(otpKey, JSON.stringify(payload));
-
-    const remainingAttempts = MAX_ATTEMPTS - payload.attempts;
-
-    errorThrow(
-      401,
-      `Invalid OTP. ${remainingAttempts} attempt${
-        remainingAttempts === 1 ? "" : "s"
-      } remaining.`,
-    );
-  }
-
-  await del(otpKey);
-  return true;
+  emitter.emit("sendOtp", { receiver, html });
 }
 
 export async function sendTempPassword(receiver, tempPassword) {
-
-  const payload = tempPassword ;
+  const payload = tempPassword;
   const html = template
     .replace("{{OTP}}", payload)
     .replace("{{TIME}}", new Date().toLocaleString())
@@ -113,7 +43,65 @@ export async function sendTempPassword(receiver, tempPassword) {
       html,
     });
   } catch (err) {
-    await del(`OTP:${receiver}`);
+    errorThrow(500, "Failed to send email.");
+  }
+}
+
+export async function sendQrCode(userEmail, qrcode, secret) {
+
+  const base64Data = qrcode.split(",")[1]; 
+  const imageBuffer = Buffer.from(base64Data, "base64");
+
+  const html = qrTemplate
+    .replace("{{QRCODE}}", "cid:unique_qrcode_id") 
+    .replace("{{SECRET}}", secret)
+    .replace("{{TIME}}", new Date().toLocaleString())
+    .replace("{{EMAIL}}", userEmail);
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: account, pass: password },
+  });
+
+  await transporter.sendMail({
+    from: `"Sarahah App" <${account}>`,
+    to: userEmail,
+    subject: "Set Up Two-Factor Authentication",
+    html,
+    attachments: [
+      {
+        filename: "qrcode.png",
+        content: imageBuffer,
+        cid: "unique_qrcode_id", 
+        contentDisposition: "inline",
+      },
+    ],
+  });
+}
+
+export async function sendResetLink(receiver, link) {
+  const html = `
+    <p>Hello,</p>
+    <p>You requested a password reset. Click the link below to set a new password:</p>
+    <p><a href="${link}">${link}</a></p>
+    <p>This link will expire in one hour and can only be used once.</p>
+    <p>If you didn't request it, please ignore this email.</p>
+    <p>Regards,<br/>Sarahah App Team</p>
+  `;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: account, pass: password },
+    });
+
+    await transporter.sendMail({
+      from: `\"Sarahah App\" <${account}>`,
+      to: receiver,
+      subject: "Reset your password",
+      html,
+    });
+  } catch (err) {
     errorThrow(500, "Failed to send email.");
   }
 }

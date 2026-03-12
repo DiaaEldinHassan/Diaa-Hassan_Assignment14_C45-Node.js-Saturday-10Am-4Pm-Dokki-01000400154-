@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { uploadAvatar } from "../../Middlewares/upload.middleware.js";
-import { authorization, role, success, validation } from "../../index.js";
+import { authorization, cloudFileUpload, imageValidation, role, success, validation } from "../../index.js";
 import {
   updateProfilePicture,
   addVisitor,
@@ -9,34 +8,30 @@ import {
   getUserData,
   resendOtp,
   updatePassword,
-
+  get2FactorAuthenticationCode,
+  verify2FactorAuthenticationCode,
 } from "./index.js";
 import updateUserSchema, { updatePasswordSchema } from "./update.validation.js";
-export const router = Router();
+import { imageFileSchema } from "../../Common/Multer/multer.validation.js";
+export const router = Router({ mergeParams: true , strict: true, caseSensitive: true });
 
 // Upload Profile Picture
 router.post(
-  "/avatar",
+  "/uploadProfilePicture",
+  cloudFileUpload({ size: 3 }).single("avatar"),
+  imageValidation(imageFileSchema),
   authorization([role.User, role.Admin]),
-  uploadAvatar.single("avatar"),
   async (req, res, next) => {
     try {
-      if (!req.file) {
-        return res
-          .status(400)
-          .json({ success: false, message: "No file provided" });
-      }
-
-      const url = `/uploads/${req.file.filename}`;
-      const user = await updateProfilePicture(req.user._id, url);
-      success(res, 200, user);
+     const updatePhoto= await updateProfilePicture(req.file.buffer,req.user);
+      success(res, 200,updatePhoto);
     } catch (error) {
       next(error);
     }
   },
 );
 
-// User Data 
+// User Data
 router.get(
   "/userData",
   authorization([role.Admin, role.User]),
@@ -63,7 +58,6 @@ router.post(
     }
   },
 );
-
 
 // OTP Controllers
 router.post(
@@ -93,14 +87,20 @@ router.get(
 );
 
 // Update Controllers
-router.patch("/updatePassword",authorization([role.Admin,role.User]),validation(updatePasswordSchema),async (req,res,next) => {
-  try {
-    delete req.body.confirmPassword;
-    const update=await updatePassword(req.user,req.body);
-  } catch (error) {
-    next(error);
-  }
-})
+router.patch(
+  "/updatePassword",
+  authorization([role.Admin, role.User]),
+  validation(updatePasswordSchema),
+  async (req, res, next) => {
+    try {
+      delete req.body.confirmPassword;
+      const update = await updatePassword(req.user, req.body);
+      success(res, 201, update);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.patch(
   "/updateData",
@@ -116,3 +116,21 @@ router.patch(
   },
 );
 
+// 2 Step Verification 2 FA Controllers
+router.post("/2fa/init",authorization([role.User, role.Admin]),async (req,res,next) => {
+  try {
+    const verify=await get2FactorAuthenticationCode(req.user);
+    success(res,200,verify)
+  } catch (error) {
+    next(error);
+  }
+})
+
+router.post("/2fa/verify",authorization([role.User, role.Admin]),async (req,res,next) => {
+  try {
+    const verify=await verify2FactorAuthenticationCode(req.user,req.body.code);
+    success(res,200,verify)
+  } catch (error) {
+    next(error);
+  }
+})

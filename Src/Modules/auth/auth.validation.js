@@ -149,3 +149,45 @@ export const sendTempPasswordSchema = Joi.object({
       "any.required": "Email is required",
     }),
 });
+
+// schema for requesting a one‑time reset link
+export const forgotPasswordLinkSchema = Joi.object({
+  email: Joi.string()
+    .email()
+    .pattern(
+      /^[a-zA-Z0-9,_+-]+@(gmail|yahoo|outlook|hotmail)\.(com|net)(\.edu|\.eg)?$/,
+    )
+    .required()
+    .messages({
+      "string.email": "Please enter a valid email address",
+      "string.empty": "Email is required",
+      "any.required": "Email is required",
+    }),
+});
+
+// schema for consuming reset link
+export const resetPasswordSchema = Joi.object({
+  email: Joi.string().email().required(),
+  token: Joi.string().required().messages({
+    "string.empty": "Token is required",
+    "any.required": "Token is required",
+  }),
+  newPassword: Joi.string()
+    .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])"))
+    .min(8)
+    .required()
+    .messages({
+      "string.pattern.base":
+        "Password must contain at least one uppercase letter, one lowercase letter, and one number",
+      "string.empty": "New password is required",
+      "any.required": "New password is required",
+    }),
+  confirmPassword: Joi.string()
+    .valid(Joi.ref("newPassword"))
+    .required()
+    .messages({
+      "any.only": "Passwords do not match",
+      "string.empty": "Please confirm your password",
+      "any.required": "Password confirmation is required",
+    }),
+});

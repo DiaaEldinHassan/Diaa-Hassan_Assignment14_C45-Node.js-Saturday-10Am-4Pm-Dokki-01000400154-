@@ -3,7 +3,7 @@ import { authorization, role, success, validation } from "../../index.js";
 import { getMessages, sendNewMessage } from "./messages.service.js";
 import { messagesSchema } from "./messages.validation.js";
 
-export const router= Router();
+export const router= Router({ mergeParams: true , strict: true, caseSensitive: true });
 
 router.get("/myMessages", authorization([role.Admin, role.User]), async (req, res, next) => {
     try {

@@ -13,7 +13,7 @@ export function generateToken(data, type) {
 
   switch (type) {
     case "access":
-      return jwt.sign(payload, access_sk,  { expiresIn: "15m" });
+      return jwt.sign(payload, access_sk,  { expiresIn: "1d" });
     case "refresh":
       return jwt.sign(payload, refresh_sk, { expiresIn: "7d"  });
     default:

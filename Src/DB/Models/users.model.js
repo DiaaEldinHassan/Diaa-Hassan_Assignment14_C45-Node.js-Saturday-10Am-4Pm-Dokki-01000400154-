@@ -31,6 +31,7 @@ const usersModelSchema = new mongoose.Schema(
       ],
     },
     picture: { type: String, default: null },
+    publicId: { type: String, default: null },
     gender: {
       type: String,
       enum: [gender.Male, gender.Female],
@@ -64,10 +65,26 @@ const usersModelSchema = new mongoose.Schema(
     },
     isWarned: {
       type: Boolean,
-      default: false, 
+      default: false,
     },
     forgetPassword: {
       type: String,
+    },
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
+    },
+    twoFactorKey: {
+      type: String,
+      default: null,
+    },
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
     },
   },
   {
@@ -81,12 +98,10 @@ usersModelSchema.virtual("userName").get(function () {
   return `${this.firstName} ${this.lastName}`.trim();
 });
 
-
 usersModelSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
   this.password = await hashing(this.password);
 });
-
 
 usersModelSchema.pre("findOneAndUpdate", async function () {
   const update = this.getUpdate();

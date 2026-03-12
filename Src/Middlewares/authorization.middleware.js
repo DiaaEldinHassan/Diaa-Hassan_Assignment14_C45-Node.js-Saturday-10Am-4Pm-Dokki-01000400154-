@@ -1,5 +1,12 @@
 import { role } from "../index.js";
-import { UnauthorizedError, verifyToken, set, get } from "../index.js";
+import {
+  UnauthorizedError,
+  verifyToken,
+  set,
+  get,
+  findById,
+  usersModel,
+} from "../index.js";
 
 import jwt from "jsonwebtoken";
 
@@ -22,6 +29,13 @@ export function authorization(aud = [role.User], process = "login") {
         const decoded = verifyToken(token);
         if (!aud.includes(decoded.role))
           throw new UnauthorizedError("Forbidden");
+
+        const user = await findById(usersModel, decoded._id);
+        if (!user) {
+          throw new UnauthorizedError(
+            "User no longer exists. Please register again.",
+          );
+        }
 
         req.user = decoded;
         next();
